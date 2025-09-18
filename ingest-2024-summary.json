@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "normalized_rows": 24,
+  "inserted": 12,
+  "updated": 0,
+  "unchanged": 12,
+  "range": {
+    "start": "2024-01",
+    "end": "2024-12"
+  },
+  "level": 3,
+  "province": "NATIONAL"
+}
