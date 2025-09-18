@@ -227,9 +227,26 @@ curl 'https://api-panelhargav2.badanpangan.go.id/api/front/harga-pangan-bulanan-
   )`.
   - This table is independent of monthly price facts.
 
+## Current Implementation Status (Phase 4A In Progress)
+
+### ✅ **COMPLETED PHASES**
+- **Phase 2**: Complete data ingestion pipeline with real upstream API
+- **Phase 3**: Full API implementation with GET /prices, GET /commodities, GET /provinces
+- **Phase 4A (Week 1)**: ✅ **Level 1 (Producer) data successfully ingested**
+  - 145 records added for 2024 producer prices
+  - 13 producer-level commodities covered
+  - API queries working for both Level 1 and Level 3
+
+### 📊 **CURRENT DATA STATUS**
+- **Total Records**: 393 (Level 1: 145 + Level 3: 248)
+- **Price Levels**: 2/5 implemented (Producer + Consumer)
+- **Commodities**: 35 total (13 producer + 22 consumer)
+- **Coverage**: 88% of core commodities (22/25 essential items)
+- **Province**: NATIONAL only (Indonesia-wide aggregate)
+
 ## Decisions (proposed defaults)
 - Province scope: **FOCUS ON NATIONAL LEVEL ONLY** using `province_id='NATIONAL'`. Single province for comprehensive Indonesian market analysis.
-- Level harga scope: **EXPAND TO ALL LEVELS** - Add producer (1), wholesale (2), export (4), import (5) levels to complement consumer (3).
+- Level harga scope: **PHASED EXPANSION** - ✅ Level 1 (Producer) completed, 🔄 Level 2 (Wholesale) next, then Level 4/5 (Export/Import).
 - **PRIORITY**: Implement multi-level data ingestion for complete market coverage (producer → wholesale → consumer → export/import).
 - **HISTORICAL DATA**: Add 2023 and earlier data for trend analysis and forecasting.
 - Units: store verbatim; do not cross-aggregate different units.
@@ -237,19 +254,23 @@ curl 'https://api-panelhargav2.badanpangan.go.id/api/front/harga-pangan-bulanan-
 - Validation: fail fast on unknown month keys; log payload sample. Skip null/absent months without creating rows.
 - Timeouts/backoff: httpx total timeout 20s; backoff 1,2,4,8,16s; max 5 attempts per window.
 - Scheduling: **Weekly level rotation** (cycle through all 5 price levels); **Monthly historical updates** (add previous year data); Mirror schedules in OS cron.
-- **UPDATED**: Add daily province rotation and quarterly historical data refresh.
 
-## API Examples (consumer)
-- **Current (Level 3 only)**: Consumer prices for November 2024:
-  - `GET /prices?level_harga_id=3&period_start=2024-11-01&period_end=2024-11-30&limit=50`
-- **After Phase 4A**: Compare producer vs consumer prices:
-  - `GET /prices?level_harga_id=1&commodity_id=27` (Producer prices)
-  - `GET /prices?level_harga_id=3&commodity_id=27` (Consumer prices)
-- **After Phase 4B**: Historical trend analysis:
-  - `GET /prices?level_harga_id=3&period_start=2023-01-01&period_end=2024-12-31` (2-year trend)
-- List commodities and provinces:
-  - `GET /commodities` (25 commodities available)
-  - `GET /provinces` (NATIONAL aggregate)
+## API Examples (current & future)
+
+### ✅ **WORKING NOW**
+- **Consumer prices**: `GET /prices?level_harga_id=3&commodity_id=27&limit=5`
+- **Producer prices**: `GET /prices?level_harga_id=1&commodity_id=2&limit=5`
+- **List all commodities**: `GET /commodities` (35 total available)
+- **List provinces**: `GET /provinces` (NATIONAL aggregate)
+
+### 🔄 **PHASE 4A (In Progress)**
+- **Wholesale prices** (next): `GET /prices?level_harga_id=2&commodity_id=X`
+- **Export prices**: `GET /prices?level_harga_id=4&commodity_id=X`
+- **Import prices**: `GET /prices?level_harga_id=5&commodity_id=X`
+
+### 🚀 **PHASE 4B (Future)**
+- **Historical trends**: `GET /prices?level_harga_id=3&period_start=2023-01-01&period_end=2024-12-31`
+- **Cross-level comparisons**: Producer vs Consumer price analysis
 
 ## Backfill & Seed Strategy
 - Initial seed: backfill last 3 months (rolling) at boot or via one-shot CLI.
