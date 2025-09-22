@@ -21,9 +21,6 @@ black = "^24.3.0"
 mypy = "^1.7.0"
 
 [tool.ruff]
-line-length = 88
-
-[tool.ruff]
 # Exclude a variety of commonly ignored directories.
 exclude = [
     ".bzr",
