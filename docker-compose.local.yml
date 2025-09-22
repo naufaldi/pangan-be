@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: pangan-api-local
+    restart: unless-stopped
+    ports:
+      - "8000:8000"  # Expose for local testing only
+    environment:
+      - ENV=development
+      - TZ=Asia/Jakarta
+      - PORT=8000
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/pangan-db  # Internal container port
+      - LOG_LEVEL=INFO
+    networks:
+      - pangan-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    volumes:
+      - ./:/app  # Mount source for development
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /app/app
+        - action: rebuild
+          path: requirements.txt
+
+  postgres:
+    image: postgres:16
+    container_name: pangan-postgres-local
+    restart: unless-stopped
+    ports:
+      - "5433:5432"  # Use 5433 locally to avoid conflict with existing PostgreSQL
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=pangan-db
+      - TZ=Asia/Jakarta
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - pangan-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pangan-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  pangan-network:
+    driver: bridge

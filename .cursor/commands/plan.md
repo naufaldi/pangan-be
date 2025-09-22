@@ -1,0 +1,1 @@
+Always follow rules in [AGENTS.md](AGENTS.md). write down how you fix, solve, or improve the issue or feature in [TODO.md](TODO.md) than make it to a checklist so i can check if its good or not. Dont code, but plan and research first.

@@ -65,3 +65,31 @@ async def readyz():
         return JSONResponse(
             {"status": "error", "detail": "Readiness check failed"}, status_code=503
         )
+
+
+@router.get("", summary="Simple health check", response_model=HealthResponse)
+async def health():
+    """
+    Simple health check endpoint for Docker health checks and load balancers.
+    Returns 200 when the application is healthy and ready to serve requests.
+    """
+    try:
+        health_status = health_service.get_readiness_status()
+
+        if not health_status.is_ready:
+            return JSONResponse(
+                {"status": "unhealthy", "detail": "Application not ready"},
+                status_code=503,
+            )
+
+        return JSONResponse(
+            {
+                "status": "healthy",
+                "timestamp": health_status.timestamp.isoformat(),
+            }
+        )
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return JSONResponse(
+            {"status": "error", "detail": "Health check failed"}, status_code=500
+        )

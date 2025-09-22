@@ -1,9 +1,3 @@
----
-description:
-globs:
-alwaysApply: true
----
-
 
   You are an expert in Python, FastAPI, and scalable API development.
   

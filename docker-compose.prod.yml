@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  api:
+    image: ghcr.io/${GITHUB_REPOSITORY}/pangan-api:${IMAGE_TAG:-latest}
+    container_name: pangan-api
+    restart: unless-stopped
+    environment:
+      - ENV=production
+      - TZ=Asia/Jakarta
+      - PORT=8000
+      - DATABASE_URL=postgresql+psycopg://postgres:${DB_PASSWORD}@postgres:5432/pangan-db
+      - LOG_LEVEL=INFO
+    # Caddy Docker Proxy labels for automatic routing
+    labels:
+      caddy: api.yourdomain.com  # Replace with your actual domain
+      caddy.reverse_proxy: "{{upstreams 8000}}"
+      caddy.header_up.Host: "{host}"
+      caddy.header_up.X-Real-IP: "{remote}"
+      caddy.header_up.X-Forwarded-For: "{remote}"
+      caddy.header_up.X-Forwarded-Proto: "{scheme}"
+      # Security headers
+      caddy.header.X-Frame-Options: "DENY"
+      caddy.header.X-Content-Type-Options: "nosniff"
+      caddy.header.X-XSS-Protection: "1; mode=block"
+      caddy.header.Referrer-Policy: "strict-origin-when-cross-origin"
+      # Enable automatic updates
+      com.centurylinklabs.watchtower.enable: "true"
+    networks:
+      - pangan-network
+      - edge  # Connect to existing Caddy edge network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health').raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  postgres:
+    image: postgres:16
+    container_name: pangan-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=pangan-db
+      - TZ=Asia/Jakarta
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    networks:
+      - pangan-network  # Only private network for security
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pangan-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+volumes:
+  pgdata:
+    driver: local
+
+networks:
+  pangan-network:
+    driver: bridge
+  edge:
+    external: true  # Connect to existing Caddy edge network

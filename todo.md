@@ -1,5 +1,123 @@
 # Pangan API - Current Implementation Status
 
+## 🔬 **LOCAL TESTING PLAN** - Docker API + DB Validation
+
+### 📋 **Local Testing Checklist**
+
+#### **1. Local Docker Environment Setup**
+- [x] Verify Docker and Docker Compose installation
+- [x] Test basic Docker functionality (`docker run hello-world`)
+- [x] Ensure Docker daemon is running
+- [x] Check available disk space (>5GB free)
+
+#### **2. Production Docker Compose Validation**
+- [x] Test `docker-compose.prod.yml` locally (without Caddy labels)
+- [x] Validate PostgreSQL container startup and health checks
+- [x] Test API container build and startup
+- [x] Verify network connectivity between API and DB containers
+- [x] Confirm environment variables are properly loaded
+
+#### **3. Database Operations Testing**
+- [x] Test database connection from API container
+- [x] Verify Alembic migrations run successfully
+- [x] Test administrative data seeding
+- [x] Validate database schema creation
+- [x] Check database logs for any errors
+
+#### **4. API Functionality Testing**
+- [x] Test API health endpoints (`/health`, `/healthz`, `/readyz`)
+- [x] Verify FastAPI application starts without errors
+- [ ] Test basic API routes and responses
+- [x] Validate CORS settings work correctly
+- [x] Check application logs for any startup issues
+
+#### **5. Network and Security Validation**
+- [x] Verify containers are properly isolated (DB not exposed to external)
+- [x] Test inter-container communication
+- [x] Validate security headers are applied
+- [x] Check for any port conflicts or security issues
+
+#### **6. Cleanup and Optimization**
+- [x] Test container stop/start/restart cycles
+- [x] Verify data persistence across container restarts
+- [x] Check resource usage (CPU, memory)
+- [x] Validate log rotation and cleanup
+
+### 🛠️ **Local Testing Commands**
+
+#### **Quick Start Test**
+```bash
+# 1. Build and start services
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d
+
+# 2. Check container status
+docker compose -f docker-compose.prod.yml ps
+
+# 3. Test API connectivity
+curl http://localhost:8000/health
+
+# 4. Check database connectivity
+docker compose -f docker-compose.prod.yml exec api python -c "
+import os
+from sqlalchemy import create_engine, text
+engine = create_engine(os.getenv('DATABASE_URL'))
+with engine.connect() as conn:
+    result = conn.execute(text('SELECT 1'))
+    print('DB Connection: OK')
+"
+
+# 5. Test migrations
+docker compose -f docker-compose.prod.yml exec api alembic upgrade head
+
+# 6. View logs
+docker compose -f docker-compose.prod.yml logs -f
+```
+
+#### **Comprehensive Testing**
+```bash
+# Test all health endpoints
+curl -s http://localhost:8000/health | python3 -m json.tool
+curl -s http://localhost:8000/healthz | python3 -m json.tool
+curl -s http://localhost:8000/readyz | python3 -m json.tool
+
+# Test database operations
+docker compose -f docker-compose.prod.yml exec api python scripts/migrate.py
+docker compose -f docker-compose.prod.yml exec api python -c "
+from app.infra.seeding import seed_administrative_data_sync
+seed_administrative_data_sync()
+"
+```
+
+### 🔧 **Expected Results**
+
+#### **✅ Success Criteria**
+- [ ] All containers start without errors
+- [ ] API responds to health checks with 200 status
+- [ ] Database connection is established successfully
+- [ ] Migrations run without errors
+- [ ] Administrative data is seeded properly
+- [ ] No port conflicts or security warnings
+- [ ] Logs show clean startup without errors
+
+#### **❌ Common Issues to Watch For**
+- [ ] Database connection failures
+- [ ] Migration script errors
+- [ ] Port already in use errors
+- [ ] Permission issues with Docker
+- [ ] Environment variable loading problems
+- [ ] Network connectivity issues between containers
+
+### 📝 **Testing Notes**
+
+**Important**: For local testing, temporarily comment out Caddy-specific labels and external network references in `docker-compose.prod.yml` to avoid dependency on the Caddy edge network.
+
+**Environment Variables**: Create a `.env.local` file for local testing with appropriate local database settings.
+
+**Resource Requirements**: Ensure adequate resources for running PostgreSQL + API containers simultaneously.
+
+---
+
 ## 📊 **PHASES OVERVIEW**
 
 ### ✅ **PHASE 0: Foundation** (95% Complete)

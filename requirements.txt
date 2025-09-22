@@ -9,6 +9,10 @@ apscheduler==3.10.1
 python-json-logger==2.0.7
 alembic==1.13.2
 
+# Production performance optimizations
+httptools==0.6.1
+uvloop==0.19.0
+
 # Development dependencies (quality gates)
 ruff==0.6.9
 

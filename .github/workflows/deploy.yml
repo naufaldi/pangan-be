@@ -1,0 +1,196 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  commit-hash:
+    runs-on: ubuntu-latest
+    outputs:
+      commit_hash: ${{ steps.get_commit.outputs.commit_hash }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get commit hash
+        id: get_commit
+        run: echo "commit_hash=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+  build-and-push:
+    needs:
+      - commit-hash
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.prod
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/pangan-api:${{ needs.commit-hash.outputs.commit_hash }}
+            ghcr.io/${{ github.repository }}/pangan-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-to-vps:
+    needs: [build-and-push, commit-hash]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Navigate to project directory
+            cd ~/projects/pangan-be || {
+              echo "Project directory not found. Creating projects directory and cloning repository..."
+              mkdir -p ~/projects
+              git clone https://github.com/${{ github.repository }}.git ~/projects/pangan-be
+              cd ~/projects/pangan-be
+            }
+
+            # Update to latest code
+            git pull origin main || true
+
+            # Login to GitHub Container Registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull the latest images (both commit-specific and latest tags)
+            echo "📦 Pulling latest images..."
+            docker pull ghcr.io/${{ github.repository }}/pangan-api:${{ needs.commit-hash.outputs.commit_hash }}
+            docker pull ghcr.io/${{ github.repository }}/pangan-api:latest
+
+            # Create environment file if it doesn't exist
+            if [ ! -f .env.production ]; then
+              echo "Creating .env.production file..."
+              cat > .env.production << EOF
+            GITHUB_REPOSITORY=${{ github.repository }}
+            IMAGE_TAG=${{ needs.commit-hash.outputs.commit_hash }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            TZ=Asia/Jakarta
+            ENV=production
+            LOG_LEVEL=INFO
+            EOF
+            fi
+
+            # Download the actual docker-compose.prod.yml from the repository
+            curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                 -H "Accept: application/vnd.github.v3.raw" \
+                 -o docker-compose.prod.yml \
+                 https://api.github.com/repos/${{ github.repository }}/contents/docker-compose.prod.yml
+
+            # Ensure edge network exists (created by Caddy Docker Proxy)
+            docker network create edge || true
+
+            # Stop existing services gracefully
+            echo "Stopping existing services..."
+            docker-compose -f docker-compose.prod.yml --env-file .env.production down || true
+
+            # Start only the database so we can run migrations against it
+            echo "Starting PostgreSQL..."
+            docker-compose -f docker-compose.prod.yml --env-file .env.production up -d postgres
+
+            # Wait for Postgres to be ready (tries ~60s)
+            echo "Waiting for Postgres to be ready..."
+            for i in $(seq 1 30); do
+              docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T postgres pg_isready -U postgres -d pangan-db &>/dev/null && { echo "Postgres is ready"; break; }
+              echo "Waiting for Postgres... attempt $i"
+              sleep 2
+            done
+
+            # Ensure PostGIS extension exists (best-effort)
+            docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T postgres psql -U postgres -d pangan-db -c "CREATE EXTENSION IF NOT EXISTS postgis;" || echo "Warning: couldn't create postgis extension (image may not support it)"
+
+            # Run database migrations (idempotent) every deploy
+            echo "Running database migrations..."
+            docker run --rm --network pangan-network --env-file .env.production ghcr.io/${{ github.repository }}/pangan-api:${{ needs.commit-hash.outputs.commit_hash }} alembic upgrade head || {
+              echo "Migrations failed" >&2
+              docker-compose -f docker-compose.prod.yml --env-file .env.production logs --tail=200 postgres
+              exit 1
+            }
+
+            # Ensure administrative data exists (provinces/regencies/districts)
+            echo "Checking administrative tables (provinces)..."
+            PROVINCES_EXISTS=$(docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T postgres psql -U postgres -d pangan-db -tAc "SELECT to_regclass('public.provinces') IS NOT NULL;")
+
+            if [ "${PROVINCES_EXISTS}" != "t" ]; then
+              echo "Provinces table missing — running data import"
+              RUN_IMPORT="yes"
+            else
+              PROVINCES_COUNT=$(docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T postgres psql -U postgres -d pangan-db -tAc "SELECT COUNT(*) FROM provinces;" || echo "0")
+              if [ "${PROVINCES_COUNT}" = "0" ]; then
+                echo "Administrative tables empty — running data import"
+                RUN_IMPORT="yes"
+              else
+                echo "Administrative tables populated (count=${PROVINCES_COUNT}) — skipping import"
+                RUN_IMPORT="no"
+              fi
+            fi
+
+            if [ "${RUN_IMPORT}" = "yes" ]; then
+              echo "Running administrative data import..."
+              docker run --rm --network pangan-network --env-file .env.production ghcr.io/${{ github.repository }}/pangan-api:${{ needs.commit-hash.outputs.commit_hash }} python -c "
+              import sys
+              sys.path.append('/app')
+              from app.infra.seeding import seed_administrative_data
+              import asyncio
+              asyncio.run(seed_administrative_data())
+              " || {
+                echo "Administrative data import failed" >&2
+                docker-compose -f docker-compose.prod.yml --env-file .env.production logs --tail=200 postgres
+                exit 1
+              }
+            fi
+
+            # Ensure external 'edge' network exists (used by Caddy Docker Proxy)
+            # Note: This should already exist from your edge proxy setup
+            docker network create edge || true
+
+            # Bring up all services
+            echo "Starting all services..."
+            docker-compose -f docker-compose.prod.yml --env-file .env.production up -d
+
+            # Wait for API to be healthy
+            echo "Waiting for API to be healthy..."
+            for i in $(seq 1 30); do
+              if docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T api curl -f http://localhost:8000/health &>/dev/null; then
+                echo "API is healthy"
+                break
+              fi
+              echo "Waiting for API... attempt $i"
+              sleep 2
+            done
+
+            # Verify Caddy Docker Proxy picked up the new service
+            echo "Verifying Caddy Docker Proxy configuration..."
+            docker logs edge-proxy-caddy-1 --tail=10 | grep -i "api.yourdomain.com" || echo "Caddy configuration update may take a moment"
+
+            # Clean up old images
+            echo "Cleaning up old images..."
+            docker image prune -f
+
+            echo "✅ Deployment completed successfully!"

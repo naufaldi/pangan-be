@@ -24,12 +24,31 @@ app = FastAPI(
     lifespan=lifespan_context,
 )
 
-# Configure CORS
+# Configure CORS based on environment
+if settings.ENV == "development":
+    # Development: Allow all origins for local development
+    allow_origins = ["*"]
+    allow_credentials = True
+else:
+    # Production: Restrict to specific domains for security
+    # You can configure this via ALLOWED_ORIGINS environment variable
+    allowed_origins_env = settings.__dict__.get("ALLOWED_ORIGINS", "")
+    if allowed_origins_env:
+        allow_origins = [origin.strip() for origin in allowed_origins_env.split(",")]
+    else:
+        # Default production origins - update these for your domain
+        allow_origins = [
+            "https://yourdomain.com",
+            "https://www.yourdomain.com",
+            "https://api.yourdomain.com"
+        ]
+    allow_credentials = True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: Tighten for production
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=allow_origins,
+    allow_credentials=allow_credentials,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 

@@ -72,17 +72,343 @@ curl http://localhost:8000/readyz
 open http://localhost:8000/docs  # Swagger UI
 ```
 
-## 🐳 Production Deployment (Docker)
+## 🐳 Production Deployment (Docker + VPS + Caddy)
 
-**Note**: Docker is used for production deployment. The provided `docker-compose.yml` currently contains the `app` service only; Postgres/DB compose is added later in Phase 1. For local development it's faster to run Python directly.
+The application is fully configured for production deployment on a VPS with Caddy reverse proxy and automated CI/CD pipeline.
 
-```bash
-# Build images
-docker compose build
+### 🚀 Production Architecture
 
-# Start app + database in production context
-docker compose up -d
 ```
+GitHub Actions CI/CD → GitHub Container Registry → VPS (Edge Proxy + API + PostgreSQL)
+├── Automated builds on main branch push
+├── Multi-arch Docker images (AMD64/ARM64)
+├── SSH deployment to VPS
+├── Database migrations on deploy
+├── Administrative data seeding
+├── Health checks and monitoring
+└── Automatic SSL certificates via Caddy Docker Proxy
+```
+
+**Edge Proxy Architecture:**
+```
+┌─────────────────┐    ┌──────────────────┐
+│   Internet      │────│  Caddy Proxy     │  (Ports 80/443 only)
+│                 │    │  (Docker Labels) │
+└─────────────────┘    └──────────────────┘
+                                │
+                        ┌───────┴───────┐
+                        │  edge network │
+                        └───────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        │                       │                       │
+┌───────▼────────┐    ┌────────▼────────┐    ┌────────▼────────┐
+│   Pangan API   │    │   Other Apps    │    │   Other Apps    │
+│ ┌────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │    Web     │ │    │ │    Web      │ │    │ │    Web      │ │
+│ └────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+│ ┌────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │     DB     │ │    │ │     DB      │ │    │ │     DB      │ │
+│ └────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+└────────────────┘    └─────────────────┘    └─────────────────┘
+   pangan-network       private networks      private networks
+```
+
+### 📋 Production Deployment Prerequisites
+
+#### 1. VPS Setup
+- ✅ **Caddy Edge Proxy already configured** (using `lucaslorentz/caddy-docker-proxy`)
+- ✅ **Edge network already exists** (created by your edge proxy setup)
+- ✅ **Docker and Docker Compose installed**
+- ✅ **SSH access configured**
+- At least 2GB RAM, 20GB storage recommended
+
+#### 2. Domain Configuration
+- Domain name pointing to your VPS IP
+- DNS records configured (A record for the API subdomain)
+- SSL certificates handled automatically by Caddy
+
+#### 3. GitHub Repository Secrets
+Configure these secrets in your GitHub repository settings:
+```bash
+VPS_HOST=your-vps-ip-or-domain.com
+VPS_USERNAME=your-ssh-username
+SSH_PRIVATE_KEY=your-private-ssh-key
+DB_PASSWORD=your-production-database-password
+GITHUB_TOKEN=github-personal-access-token
+```
+
+### 🚀 Production Deployment Steps
+
+#### Step 1: Initial VPS Setup
+```bash
+# On your VPS, ensure Docker is installed (Caddy Edge Proxy is already configured)
+sudo apt update
+sudo apt install -y docker.io docker-compose-plugin
+
+# Create required directories for Pangan deployment
+sudo mkdir -p /opt/pangan-be
+sudo chown $USER:$USER /opt/pangan-be
+
+# Verify your existing Caddy Edge Proxy setup
+docker ps | grep caddy
+docker network ls | grep edge
+
+# The edge network should already exist from your edge proxy setup
+docker network inspect edge
+```
+
+#### Step 2: Configure GitHub Secrets
+1. Go to your GitHub repository → Settings → Secrets and variables → Actions
+2. Add the required secrets listed above
+3. Generate SSH key pair if needed:
+```bash
+# On your local machine
+ssh-keygen -t ed25519 -C "github-actions@pangan-be"
+# Add public key to VPS ~/.ssh/authorized_keys
+# Add private key as SSH_PRIVATE_KEY secret
+```
+
+#### Step 3: Deploy via CI/CD
+```bash
+# Simply push to main branch - deployment happens automatically
+git add .
+git commit -m "Deploy to production"
+git push origin main
+```
+
+The CI/CD pipeline will:
+- ✅ Build optimized Docker images
+- ✅ Push to GitHub Container Registry
+- ✅ SSH into VPS and pull latest images
+- ✅ Run database migrations
+- ✅ Seed administrative data
+- ✅ Start services with health checks
+- ✅ Verify deployment success
+
+### 🔧 Production Configuration Files
+
+#### Docker Compose (Production)
+```yaml
+# docker-compose.prod.yml
+version: '3.8'
+services:
+  api:
+    image: ghcr.io/yourusername/pangan-be/pangan-api:latest
+    networks:
+      - pangan-network
+      - edge  # Connects to Caddy
+    environment:
+      - ENV=production
+      - DATABASE_URL=postgresql+psycopg://...
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  postgres:
+    image: postgres:16
+    environment:
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    networks:
+      - pangan-network
+networks:
+  edge:
+    external: true  # Your existing Caddy network
+```
+
+#### Caddy Docker Proxy Configuration
+Your Caddy setup uses Docker labels for automatic configuration. The API service is configured with these labels in `docker-compose.prod.yml`:
+
+```yaml
+services:
+  api:
+    labels:
+      caddy: api.yourdomain.com  # Your domain
+      caddy.reverse_proxy: "{{upstreams 8000}}"
+      caddy.header_up.Host: "{host}"
+      caddy.header_up.X-Real-IP: "{remote}"
+      caddy.header_up.X-Forwarded-For: "{remote}"
+      caddy.header_up.X-Forwarded-Proto: "{scheme}"
+      # Security headers
+      caddy.header.X-Frame-Options: "DENY"
+      caddy.header.X-Content-Type-Options: "nosniff"
+      caddy.header.X-XSS-Protection: "1; mode=block"
+      caddy.header.Referrer-Policy: "strict-origin-when-cross-origin"
+      # Enable automatic updates
+      com.centurylinklabs.watchtower.enable: "true"
+```
+
+**Key Features:**
+- ✅ **Automatic HTTPS** via Let's Encrypt
+- ✅ **Security headers** for production security
+- ✅ **Health checks** and load balancing
+- ✅ **Automatic updates** via Watchtower
+- ✅ **No manual Caddyfile management** required
+
+#### Environment Variables
+```bash
+# .env.production
+GITHUB_REPOSITORY=yourusername/pangan-be
+IMAGE_TAG=latest
+DB_PASSWORD=your-secure-password
+ENV=production
+TZ=Asia/Jakarta
+LOG_LEVEL=INFO
+```
+
+### 📊 Production Monitoring
+
+#### Health Endpoints
+- `GET /health` - Simple health check for Docker/load balancers
+- `GET /health/healthz` - Liveness probe
+- `GET /health/readyz` - Readiness probe
+
+#### Application Logs
+```bash
+# View application logs
+docker-compose -f docker-compose.prod.yml logs -f api
+
+# View database logs
+docker-compose -f docker-compose.prod.yml logs -f postgres
+```
+
+#### Monitoring Commands
+```bash
+# Check service health
+docker-compose -f docker-compose.prod.yml ps
+
+# Check container resource usage
+docker stats
+
+# View Caddy access logs (using your existing Caddy Docker Proxy)
+docker logs edge-proxy-caddy-1 2>&1 | grep api.yourdomain.com
+```
+
+### 🔄 Production Maintenance
+
+#### Database Operations
+```bash
+# Run migrations manually
+docker-compose -f docker-compose.prod.yml exec api alembic upgrade head
+
+# Backup database
+docker-compose -f docker-compose.prod.yml exec postgres pg_dump -U postgres pangan-db > backup.sql
+
+# Access database shell
+docker-compose -f docker-compose.prod.yml exec postgres psql -U postgres -d pangan-db
+```
+
+#### Service Management
+```bash
+# Restart services
+docker-compose -f docker-compose.prod.yml restart
+
+# Scale API service (if needed)
+docker-compose -f docker-compose.prod.yml up -d --scale api=2
+
+# Update to latest version
+docker-compose -f docker-compose.prod.yml pull
+docker-compose -f docker-compose.prod.yml up -d
+```
+
+#### Troubleshooting
+```bash
+# Check service logs for errors
+docker-compose -f docker-compose.prod.yml logs --tail=100 api
+
+# Verify network connectivity
+docker network ls
+docker network inspect edge
+
+# Check Caddy Docker Proxy configuration
+docker logs edge-proxy-caddy-1 --tail=50
+
+# Test API endpoints through Caddy
+curl -H "Host: api.yourdomain.com" http://localhost/health
+
+# Test direct API access (bypass Caddy for debugging)
+curl http://localhost:8000/health
+
+# Check SSL certificate
+curl -v -H "Host: api.yourdomain.com" https://localhost/health
+
+# Verify Caddy labels are applied correctly
+docker inspect pangan-api | grep -A 10 "Labels"
+```
+
+### 🔒 Security Considerations
+
+#### Production Security Features
+- ✅ Non-root Docker containers
+- ✅ Restricted CORS origins for production
+- ✅ Automatic SSL/TLS certificates
+- ✅ Security headers (HSTS, XSS protection, etc.)
+- ✅ Rate limiting on API endpoints
+- ✅ Database credentials via environment variables
+- ✅ SSH key-based deployment access
+
+#### Additional Security Recommendations
+- Regularly update Docker images and dependencies
+- Implement proper firewall rules on VPS
+- Use managed database backups
+- Monitor for security vulnerabilities
+- Implement proper log rotation
+- Consider using secrets management (Vault, AWS Secrets Manager, etc.)
+
+### 📈 Scaling Considerations
+
+#### Horizontal Scaling
+```yaml
+# docker-compose.prod.yml (scaled)
+services:
+  api:
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+    depends_on:
+      - postgres
+      - redis  # Add Redis for session/caching if needed
+```
+
+#### Load Balancing
+- Caddy automatically load balances between multiple API instances
+- Add Redis for session management if scaling beyond single instance
+- Consider using a managed PostgreSQL service for high availability
+
+### 🚨 Emergency Procedures
+
+#### Rollback Deployment
+```bash
+# If deployment fails, rollback to previous version
+docker tag ghcr.io/yourusername/pangan-be/pangan-api:previous ghcr.io/yourusername/pangan-be/pangan-api:latest
+docker-compose -f docker-compose.prod.yml up -d api
+```
+
+#### Database Recovery
+```bash
+# Restore from backup
+docker-compose -f docker-compose.prod.yml exec -T postgres psql -U postgres -d pangan-db < backup.sql
+```
+
+#### Emergency Shutdown
+```bash
+# Stop all services immediately
+docker-compose -f docker-compose.prod.yml down
+
+# Start only essential services
+docker-compose -f docker-compose.prod.yml up -d postgres
+```
+
+### 📞 Support & Maintenance
+
+- **Logs**: All application logs are in JSON format for easy parsing
+- **Backups**: Database backups are stored in `./backups/` directory
+- **Updates**: Push to main branch triggers automatic deployment
+- **Monitoring**: Use health endpoints for uptime monitoring
+- **Alerts**: Configure alerts for failed deployments or health check failures
+
+---
+
+*For detailed CI/CD configuration, see `.github/workflows/deploy.yml` and `docker-compose.prod.yml`*
 
 ## 📊 Health Endpoints
 
