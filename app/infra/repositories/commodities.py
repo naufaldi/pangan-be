@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 """
 SQLAlchemy-backed Commodity repository adapter (functional port).
 """
+
+from __future__ import annotations
 
 from sqlalchemy import asc, select
 from sqlalchemy.engine import Engine

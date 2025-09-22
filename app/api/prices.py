@@ -10,7 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from app.api.schemas import PaginatedPriceResponse, PriceQueryParams
+from app.api.schemas import PaginatedPriceResponse
 from app.usecases import price_service
 from app.usecases.ports import PriceRepositoryPort, CommodityRepositoryPort, ProvinceRepositoryPort
 from app.infra.repositories.prices import make_price_repository

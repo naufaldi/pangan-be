@@ -8,7 +8,7 @@ from datetime import date
 from unittest.mock import Mock
 
 from app.usecases import price_service
-from app.usecases.ports import PriceQuery, PaginatedPriceResult, PriceRecord
+from app.usecases.ports import PaginatedPriceResult
 
 
 class TestPriceServiceValidation:

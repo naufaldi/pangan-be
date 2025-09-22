@@ -8,13 +8,14 @@ import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
-# Logger setup
-logger = logging.getLogger(__name__)
 from app.infra.db import get_engine
 from app.infra.repositories.commodities import make_commodity_repository
 from app.usecases.ports import CommodityRepositoryPort
-from pydantic import BaseModel
+
+# Logger setup
+logger = logging.getLogger(__name__)
 
 
 # Pydantic response models

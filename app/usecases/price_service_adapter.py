@@ -3,6 +3,7 @@ Price service adapter - Dependency injection adapter for price services.
 This module provides factory functions to create price services with injected dependencies.
 """
 
+from datetime import date
 from typing import Callable, Optional
 
 from app.usecases.ports import (
@@ -52,8 +53,8 @@ def make_price_query_service(
     def price_query_service(
         *,
         level_harga_id: int,
-        period_start: Optional[PriceQuery.__annotations__["period_start"]] = None,
-        period_end: Optional[PriceQuery.__annotations__["period_end"]] = None,
+        period_start: Optional[date] = None,
+        period_end: Optional[date] = None,
         commodity_id: Optional[str] = None,
         province_id: Optional[str] = None,
         limit: int = 50,

@@ -1,13 +1,13 @@
-from __future__ import annotations
-
 """
 SQLAlchemy-backed Price repository adapter (functional port).
 """
 
+from __future__ import annotations
+
 import logging
 import time
 from decimal import Decimal
-from typing import Iterable, Sequence
+from typing import Iterable
 
 from sqlalchemy import and_, desc, select, text
 from sqlalchemy.engine import Engine

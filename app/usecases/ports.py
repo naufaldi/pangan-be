@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import date
+from decimal import Decimal
+from typing import Callable, Iterable, Mapping, Sequence
+
 """
 Use case layer ports (interfaces) and DTO types.
 
@@ -12,11 +17,6 @@ Notes:
   run sync path operations in a threadpool. If we migrate to async DB/HTTP,
   we can introduce async variants without breaking call sites.
 """
-
-from dataclasses import dataclass
-from datetime import date
-from decimal import Decimal
-from typing import Callable, Iterable, Mapping, Sequence
 
 
 # -------------------------

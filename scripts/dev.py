@@ -6,7 +6,6 @@ Run quality gates and development tasks.
 
 import subprocess
 import sys
-import os
 from pathlib import Path
 import json
 from typing import Any
@@ -293,7 +292,7 @@ def ingest_cmd(args: list[str]) -> None:
     from app.infra.repositories.prices import make_price_repository
     from app.infra.seeding import seed_dimensions
     from app.usecases.ports import FetchParams
-    from app.usecases.ingest import fetch_and_upsert, _normalize_payload, _with_checksums
+    from app.usecases.ingest import _normalize_payload, _with_checksums
     from app.usecases.schemas import UpstreamPayload
 
     # Setup structured logging

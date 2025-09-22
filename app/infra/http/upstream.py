@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-"""
-HTTP upstream client adapter using httpx with exponential backoff.
-
-Follows functional style returning an UpstreamClientPort, closing over config.
-"""
-
-from datetime import date
 import time
+from datetime import date
 from typing import Mapping
 
 import httpx
 
 from app.usecases.ports import FetchParams, UpstreamClientPort
+
+"""
+HTTP upstream client adapter using httpx with exponential backoff.
+
+Follows functional style returning an UpstreamClientPort, closing over config.
+"""
 
 
 DEFAULT_BASE_URL = (
@@ -201,7 +201,7 @@ def make_upstream_client(
                 data = resp.json()
                 if not isinstance(data, Mapping):
                     raise ValueError("Unexpected upstream response type (expected object)")
-                print(f"✅ Successfully fetched data from upstream")
+                print("✅ Successfully fetched data from upstream")
                 return data
             except httpx.TimeoutException as e:
                 last_exc = ConnectionError(f"Request timed out after 30s: {e}")

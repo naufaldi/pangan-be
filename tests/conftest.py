@@ -11,9 +11,6 @@ from app.usecases.ports import (
     CommodityDTO,
     ProvinceDTO,
     PaginatedPriceResult,
-    PriceRepositoryPort,
-    CommodityRepositoryPort,
-    ProvinceRepositoryPort,
 )
 
 

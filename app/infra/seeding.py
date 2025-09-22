@@ -1,20 +1,18 @@
 from __future__ import annotations
 
-"""
-Database seeding utilities for static dimensions.
-
-Idempotent upsert for `commodities` and `provinces`.
-"""
-
 import asyncio
-import json
 import logging
-from pathlib import Path
 from typing import Iterable, Mapping
 
 from sqlalchemy.orm import Session
 
 from app.infra.models import Commodity, Province
+
+"""
+Database seeding utilities for static dimensions.
+
+Idempotent upsert for `commodities` and `provinces`.
+"""
 
 logger = logging.getLogger(__name__)
 

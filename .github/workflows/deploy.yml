@@ -122,8 +122,7 @@ jobs:
               sleep 2
             done
 
-            # Ensure PostGIS extension exists (best-effort)
-            docker-compose -f docker-compose.prod.yml --env-file .env.production exec -T postgres psql -U postgres -d pangan-db -c "CREATE EXTENSION IF NOT EXISTS postgis;" || echo "Warning: couldn't create postgis extension (image may not support it)"
+            # Note: PostGIS extension not needed for this application
 
             # Run database migrations (idempotent) every deploy
             echo "Running database migrations..."

@@ -6,7 +6,6 @@ These tests assume the server is running with populated test data.
 
 import pytest
 import requests
-from datetime import date
 
 
 @pytest.fixture

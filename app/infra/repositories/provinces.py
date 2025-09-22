@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-"""
-SQLAlchemy-backed Province repository adapter (functional port).
-"""
-
 from sqlalchemy import asc, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.infra.models import Province
 from app.usecases.ports import ProvinceDTO, ProvinceRepositoryPort
+
+"""
+SQLAlchemy-backed Province repository adapter (functional port).
+"""
 
 
 def make_province_repository(*, engine: Engine) -> ProvinceRepositoryPort:

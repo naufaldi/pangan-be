@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
+from typing import Any, Mapping, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
 """
 Schemas for ingestion pipeline validation (upstream payload and normalized rows).
 """
-
-from datetime import date
-from decimal import Decimal
-from typing import Any, Dict, Mapping, Optional
-
-from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class UpstreamProvincePrice(BaseModel):
